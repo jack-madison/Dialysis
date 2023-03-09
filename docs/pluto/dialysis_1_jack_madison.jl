@@ -4,68 +4,417 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ adb93aee-f5a5-4034-be55-d991c3f3dea6
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
+# ╔═╡ 5c1aeb4f-fef2-41d0-813f-eb78728ea83b
 begin 
 	# the Dialysis.jl package is not in the official Julia registry, so we need to tell Julia / Pluto where to find it
 	import Pkg
 	Pkg.Registry.add(Pkg.Registry.RegistrySpec(url="https://github.com/schrimpf/juliaregistry.git"))
 end
 
-# ╔═╡ e25c28d8-6a36-11eb-07f3-2fcd5b400618
+# ╔═╡ c6f8ecfe-0e81-45a9-b7e6-a9ff629b549b
+using PlutoUI
+
+# ╔═╡ a80227f8-5f77-11eb-1211-95dd2c151877
+using DataFrames, # package for storing and interacting with datasets
+	Dates, Dialysis
+
+# ╔═╡ 2dda9576-5f90-11eb-29eb-91dec5be5175
+using Statistics, StatsBase # for mean, var, etc
+
+# ╔═╡ b443a46e-5fa3-11eb-3e71-dfd0683dc6e9
 begin
-	using Dialysis, DataFrames, Plots, StatsPlots, StatsBase, Statistics, PlutoUI
-	Plots.gr(fmt="png")
+  using StatsPlots , Plots, VegaLite
+  Plots.gr(fmt="png")
 end
 
-# ╔═╡ 7c447c7a-6a37-11eb-03cf-6f2c5b11326b
-"""
-    module Cleaning
+# ╔═╡ d5554696-5f6f-11eb-057f-a79641cf483a
+md"""
 
-Functions used in cleaning Dialysis Facility Reports data.
-"""
-module Cleaning
-	using Dates, DataFrames, StatsBase, Statistics
-	export guesstype, converttype, combinefiscalyears, parse, upcase, dayssince
-	"""
-	    guesstype(x)
+# Reproducing Grieco & McDevitt (2017)
 
-	Try to guess at appropriate type for x.
-	"""
-	function guesstype(x::AbstractArray{T}) where T <:Union{S,Missing} where S <: AbstractString
-		if all(occursin.(r"(^\.$)|(^(-|)\d+)$",skipmissing(x)))
-			return Int
-		elseif all(occursin.(r"(^\.$)|(^(-|\d)\d*(\.|)\d*$)",skipmissing(x)))
-			return Float64
-		elseif all(occursin.(
-					r"(^\.$)|(^\d\d\D{3}\d{4}$|^\d\d/\d\d/\d{4}$)",
-					skipmissing(x)))
-			return Date
-		else
-			return S
-		end
+Paul Schrimpf
+
+[UBC ECON567](https://faculty.arts.ubc.ca/pschrimpf/565/565.html)
+
+[![Creative Commons License](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)](http://creativecommons.org/licenses/by-sa/4.0/)
+[Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/)
+"""
+
+# ╔═╡ ad1cc4c6-5f72-11eb-35d5-53ff88f1f041
+md"""
+
+# Getting Started
+
+## Installing Julia and Pluto
+
+You can install Julia and Pluto on your own computer. To do so, first
+download and install Julia from
+[https://julialang.org/](https://julialang.org/). I recommend the
+choosing the current stable release.
+
+After installing, open Julia. This will give a Julia command
+prompt. Enter `]` to switch to package manager mode. The command
+prompt should change from a green `julia>` to a blue `(@v1.7) pkg>`. In
+package mode, type `add Pluto` and press enter. This installs the
+[Pluto.jl package](https://github.com/fonsp/Pluto.jl) and its
+dependencies. It will take a few minutes. When finished, type `Ctrl+c`
+to exit package mode. Now at the green `julia>` prompt, enter
+
+```julia
+using Pluto
+Pluto.run()
+```
+
+This will open the Pluto interface in your browser. If you close Julia
+and want to start Pluto again, you only need to repeat this last step.
+
+Download the notebook file from [github](https://raw.githubusercontent.com/UBCECON567/Dialysis/master/docs/pluto/dialysis-1.jl) and open it in Pluto. 
+
+!!! tip 
+    Instead of downloading the notebook manually, you can let Julia download when Pluto starts by entering 
+    ```julia
+    Pluto.run(notebook="https://raw.githubusercontent.com/UBCECON567/Dialysis/master/docs/pluto/dialysis-1.jl")
+    ``` 
+    instead of `Pluto.run()`. Be sure to save the notebook somewhere on your computer after it opens.
+"""
+
+
+
+# ╔═╡ 85ab85ff-6986-46e5-b8ba-6c80ccca8a3e
+md"""
+## Julia Resources
+
+This assignment will try to explain aspects of Julia as
+needed. However, if at some point you feel lost, you may want to
+consult some of the following resources. Reading the first few
+sections of either QuantEcon or Think Julia is recommended.
+
+- [Think Julia](https://benlauwens.github.io/ThinkJulia.jl/latest/book.html#_colophon)
+  A detailed introduction to Julia and programming more
+  generally. Long, but recommended, especially if you're new to
+  programming.
+
+- [QuantEcon with Julia](https://lectures.quantecon.org/jl/)
+
+- From the julia prompt, you can access documentation with
+  `?functionname`. Some packages have better documentation than
+  others.
+
+- [https://julialang.org/](https://julialang.org/) is the website for
+  Julia
+
+- Documentation for core Julia can be found at
+  [https://docs.julialang.org/](https://docs.julialang.org/). All
+  Julia packages also have a github page. Many of these include
+  package specific documentation.
+
+- [Notes on Julia from ECON
+  622](https://github.com/ubcecon/ECON622_2020) much of this is part
+  of QuantEcon, but not all
+
+- [The Julia Express](https://github.com/bkamins/The-Julia-Express)
+  short book with examples of Julia usage
+
+- [discourse.julialang.org](https://discourse.julialang.org/) is a discussion  forum for julia
+
+- [Julia Slack](https://julialang.org/slack/)
+
+!!! tip 
+    Pluto has a handful of keyboard shortcuts. You can view them by pressing F1 or Ctrl+?
+
+"""
+
+
+# ╔═╡ 24722a1a-7213-40ae-9fc8-e9e59924b758
+versioninfo()
+
+# ╔═╡ b2c0299f-5711-4071-8c29-b78616e5f874
+Pkg.status()
+
+# ╔═╡ 9e653793-a4dc-4843-980b-d8921303422f
+PlutoUI.TableOfContents(title="Reproducing Grieco & McDevitt (2017)")
+
+# ╔═╡ 7b4ecdee-5f73-11eb-388c-4d6f9719d79b
+md"""
+
+# Part I: Loading and exploring the data
+
+
+## Packages
+
+Like many programming environments (R, Python, etc), Julia relies on
+packages for lots of its functionality. Pluto has [built-in package management](https://github.com/fonsp/Pluto.jl/wiki/%F0%9F%8E%81-Package-management), and Julia automatically downloaded all the packages this notebook uses when you first opened it. 
+"""
+
+# ╔═╡ a75918ae-5f73-11eb-3a3e-2f64c0dcc49c
+md"""
+## Load Data
+
+Now let's get to work. I originally downloaded the data for this
+problem set from
+[data.cms.gov](https://data.cms.gov/browse?q=dialysis). Here, you will
+find zip files for each fiscal year from 2008-2021. As in @grieco2017
+the data comes from Dialysis Facility Reports (DFRs) created under
+contract to the Centers for Medicare and Medicaid Services
+(CMS). However, there are some differences. Most notably, this data
+covers 2003-2019, instead of 2004-2008 as in @grieco2017.
+
+The Julia code in
+[Dialysis/src/data.jl](https://github.com/UBCECON567/Dialysis/blob/master/src/Dialysis.jl)
+downloads and combines the data files. I did my best to include all
+the variables (plus more) used by @grieco2017. However, the underlying
+data is complicated (there are over 1500 variables each year), so it's
+possible I have made mistakes. It might be useful to look at
+the documentation included with any of the "Dialysis Facility Report
+Data for FY20XX" zip files at [data.cms.gov](https://data.cms.gov/browse?q=dialysis).
+
+The result of the code in `data.jl` is the `dfr.zip` file contained in
+the git repository for this assignment. This zip file contains a csv
+file with most of the variables used by @grieco2017, as well as some
+additional information.
+"""
+
+# ╔═╡ b9e1f8de-5f77-11eb-25b8-57e263315ac3
+begin
+	dialysis, datadic = Dialysis.loadDFR()
+	dialysis
+end
+
+# ╔═╡ a06995aa-5f78-11eb-3939-f9aca087b12c
+md"""
+The variable `dialysis` now contains a `DataFrame` with the data. The variable `datadic` is a `Dictionary` with brief descriptions of the columns in `dialysis`.
+
+Use `datadic` as follows.
+"""
+
+# ╔═╡ 5b2d6ebe-5f78-11eb-0528-ab36ae696a35
+datadic["dis2"]
+
+# ╔═╡ 5ea12c9c-5f79-11eb-34e7-2d7f07854b31
+md"""
+For more information on any of the variables, look at the documentation included with any of the "Dialysis Facility Report
+Data for FY20XX" zip files at [data.cms.gov](https://data.cms.gov/browse?q=dialysis). The FY2008 file might be best, since the `dialysis` dataframe uses the variable names from that year (a handful of variable names change later, but most stay the same).
+"""
+
+# ╔═╡ 95ad1f3c-5f79-11eb-36fb-1b384c84317c
+md"""
+We will begin our analysis with some data cleaning. Then we will create some  exploratory statistics and figures. There are at least two reasons for this. 
+First, we want to
+check for any anomalies in the data, which may indicate an error in
+our code, our understanding of the data, or the data itself. Second,
+we should try to see if there are any striking patterns in the data
+that deserve extra attention. We can get some information about all
+the variables in the data as follows
+"""
+
+# ╔═╡ ca038b54-5f79-11eb-0851-9f684e3bb83f
+describe(dialysis)
+
+# ╔═╡ cfaabda0-5f79-11eb-17e4-a7cd045681da
+md"""
+
+## Data Cleaning
+
+From the above, we can see that the data has some problems. It appears that "." is used to indicate missing. We should replace these with `missing`. Also, the `eltype` of most columns is `String.` We should convert to numeric types where appropriate. 
+
+!!! note "Types"
+    Every variable in Julia has a [type](https://docs.julialang.org/en/v1/manual/types/), which determines what information the variable can store. You can check the type of a variable with `typeof(variable)`. The columns of our `dialysis` DataFrame will each be some array-like type that can hold some particular types of elements. For examble, `typeof(dialysis[!,:nursePT])` (or equivalently `typeof(dialysis.nursePT)` should currently be `Array{String, 1}`. This means that right now the nursePT column can only hold strings. Therefore trying to assign an integer to an element of the column like `dialysis[2, :nursePT] = 0` will cause an error. If we want to convert the element type of the column, we have to assign the column to an entirely new array. We will do this below. 
+
+!!! note "Missing"
+    [Julia includes a special type and value to represent missing data](https://docs.julialang.org/en/v1/manual/missing/). The element type of arrays that include `missing` will be `Union{Missing, OTHERTYPE}` where `OTHERTYPE` is something like `String` or `Float64`. The `Union` means each element of the array can hold either type `Missing` or `OTHERTYPE`. Some functions will behave reasonably when they encounter `missing` values, but many do not. As a result, we will have to be slightly careful with how we handle `missing` values.
+
+Although not apparent in the `describe(dialysis)` output, it is also worth mentioning the unique format of the data. The data is distributed with one file per fiscal year. Each fiscal year file reports the values of most variables in calendar years 6 to 2 years ago. We need to convert things to have a single calendar year value for each variable.
+
+### Type Conversion
+
+We begin by converting types. We will use [regular expressions](https://docs.julialang.org/en/v1/manual/strings/#Regular-Expressions) to try identify columns whose strings all look like integers or all look like floating point numbers.
+Many programming languages have ways to work with regular expressions. It is worth remembering regular expressions are a useful tool for parsing strings, but beyond that do not worry about the dark art of regular expressions too much.
+"""
+
+# ╔═╡ c642b578-5f77-11eb-1346-15a35500e61f
+"""
+    guesstype(x)
+
+Try to guess at appropriate type for x.
+"""
+function guesstype(x::AbstractArray{T}) where T <:Union{S,Missing} where S <: AbstractString
+	# r"" creates a regular expression
+	# regular expressions are useful for matching patterns in strings
+	# This regular expression matches strings that are either just "." or begin with - or a digit and are followed by 0 or more additional digits
+	#
+	# all(array) is true if all elements of the array are true
+	#
+	# skipmissing(x) creates a iterator over the non-missing elements of x (this iterator will behave like an array of the non-missing elements of x)
+	if all(occursin.(r"(^\.$)|(^(-|)\d+)$",skipmissing(x)))
+		return Int
+	elseif all(occursin.(r"(^\.$)|(^(-|\d)\d*(\.|)\d*$)",skipmissing(x)))
+		return Float64
+	elseif all(occursin.(
+				r"(^\.$)|(^\d\d\D{3}\d{4}$|^\d\d/\d\d/\d{4}$)",
+				skipmissing(x)))
+		return Date
+	else
+		return S
 	end
-	guesstype(x) = eltype(x)
+end
 
+# ╔═╡ 3d6cf930-5f80-11eb-04a1-0f608e26886b
+guesstype(x) = eltype(x)
+
+# ╔═╡ c7192aba-5fe8-11eb-1d50-81cb0f959b4a
+md"""
+!!! info "Broadcasting"
+    It is very common to want to apply a function to each element of an array. We call this broadcasting. To broadcast a function, put a `.` between the function name and `(`. Thus, `occursin.(r"(^\.$)|(^(-|)\d+)$",X)`  produces the same result as
+    ```julia
+    out = Array{Bool, 1}(undef, length(X))
+    for i in 1:length(x)
+      out[i] = occursin(r"(^\.$)|(^(-|)\d+)$",X[i])
+    end    
+    ```
+
+"""
+
+# ╔═╡ 600c6368-5f80-11eb-24b1-c35a333d7164
+md"""
+
+!!! note "Multiple Dispatch"
+    An important Julia feature for organizing code is multiple dispatch. Multiple dispatch refers to having multiple definitions of functions with the same name, and which version of the function gets used is determined by the types of the function arguments. In the second code block above, we defined a generic `guesstype(x)` for any type of argument `x`. In the first code block, we have a more specialized `guesstype(x)` function for `x` that are `AbstractArray` with element type either `String`, `Missing` or `Union{String, Missing}`. When we call `guesstype(whatever)` below, the most specific version of `guesstype` that fits the type of `whatever` will get used.
+"""
+
+# ╔═╡ bcaf264a-5f77-11eb-2bf5-1bd3c16dbce6
+guesstype(["1", "3.3", "5"]) # this will call the first definition of guesstype since the argument is an Array of String
+
+# ╔═╡ 46da23f6-5f82-11eb-2c42-dbcf1c09192e
+guesstype([12.4, -0.8]) # this will call the second definition of guesstype since the argument is an Array of Float64
+
+# ╔═╡ 65d2d0e8-5f85-11eb-2e4b-b3e561a1a63c
+md"""
+Again using multiple dispatch, we can create a function to convert the types of the columns of the `dialysis` DataFrame.
+"""
+
+# ╔═╡ 81b220c8-5f82-11eb-141a-53ed12752330
+converttype(x) = x
+
+# ╔═╡ 1f577cac-5feb-11eb-19c7-2ff4856aee9d
+md"""
+!!! info "Adding Methods to Existing Functions"
+    `Base.parse` is a function included in Julia for converting strings to numeric types.
+    We want to use parse to convert the types of our DataFrame columns.
+    However, for some columns, we want to leave strings as strings, and for others we want to convert strings to dates.
+    The builtin parse function only converts strings to numbers.
+    However, we can define additional parse methods and use multiple dispatch to handle these cases.
 	
-	parse(t, x) = Base.parse(t, x)
+	🏴‍☠️ Adding methods for types that we did not create to existing functions is called [type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy). Type piracy can break code in unexpected ways, so it should be avoided. Instead of definining new methods for `Base.parse`, we create a new function `myparse` and add methods to it.🏴‍☠️
+
+    This approach will make the `converttype` function defined below very short and simple.
+"""
+
+# ╔═╡ 3f871682-5f86-11eb-2c50-971aa2d55aec
+begin
+	myparse(t,x) = Base.parse(t,x)
 	# we need a parse that "converts" a string to string
-	parse(::Type{S}, x::S) where S <: AbstractString = x	
-	# a version of parse that works for the date formats in this data
-	parse(::Type{Dates.Date}, x::AbstractString) = occursin(r"\D{3}",x) ? Date(x, "dduuuyyyyy") : Date(x,"m/d/y")
+	myparse(::Type{S}, x::S) where S <: AbstractString = x 
 	
-	"""  
-	    converttype(x)
-    
-    Convert `x` from an array of strings to a more appropriate numeric type 
-	if possible.
-	"""
-	function converttype(x::AbstractArray{T}) where T <: Union{Missing, AbstractString}
-		etype = guesstype(x)
-		return([(ismissing(val) || val==".") ? missing : parse(etype,val)
-			for val in x])
-	end
-	converttype(x) = x
+	# a version of parse that works for the date formats in this data
+	myparse(::Type{Dates.Date}, x::AbstractString) = occursin(r"\D{3}",x) ? Date(x, "dduuuyyyyy") : Date(x,"m/d/y")
+	myparse
+end
 
+# ╔═╡ 34fa745c-5fec-11eb-3c3c-67eba7bffa6e
+md"""
+!!! info "Ternary Operator"
+    In `converttype`, we use the [ternary operator](https://docs.julialang.org/en/v1/base/base/#?:), which is just a concise way to write an if-else statement.
+    ```julia
+    boolean ? value_if_true : value_if_false
+    ```
+"""
+
+# ╔═╡ 985c4280-5fec-11eb-362b-21e463e63f8d
+md"""
+!!! info "Array Comprehension"
+    In `converttype`, we use an [array comprehension](https://docs.julialang.org/en/v1/manual/arrays/#man-comprehensions) to create the return value. Comprehensions  are a concise and convenient way to create new arrays from existing ones. 
+
+    [Generator expressions](https://docs.julialang.org/en/v1/manual/arrays/#Generator-Expressions) are a related concept. 
+"""
+
+# ╔═╡ 7c756c72-5f83-11eb-28d5-7b5654c51ea3
+function converttype(x::AbstractArray{T}) where T <: Union{Missing, AbstractString}
+	etype = guesstype(x)
+	return([(ismissing(val) || val==".") ? missing : myparse(etype,val)
+		for val in x])
+end
+
+# ╔═╡ 8c8cab5a-5f85-11eb-1bb0-e506d437545d
+md"""
+A quick test.
+"""
+
+# ╔═╡ 57324928-5f83-11eb-3e9f-4562c8b03cd4
+converttype([".","315", "-35.8"])
+
+# ╔═╡ a3452e58-5f85-11eb-18fb-e5f00173defb
+clean1 = let
+	clean1 = mapcols(converttype, dialysis) # apply converttype to each column of dialysis
+	
+	# fix the identifier strings. some years they're listed as ="IDNUMBER", others, they're just IDNUMBER
+	clean1.provfs = replace.(clean1.provfs, "="=>"")
+	clean1.provfs = replace.(clean1.provfs,"\""=>"")
+	clean1
+end
+
+# ╔═╡ f6620c93-56fd-45b4-9b4e-6cb6ec8736c7
+guesstype(dialysis.ptcareFT) <: Union{Missing,AbstractString}
+
+# ╔═╡ bff2e0a8-5f86-11eb-24fd-9504f5c47ffb
+describe(clean1)
+
+# ╔═╡ f895392e-5f8b-11eb-1d7a-3f9c6c5ce483
+md"""
+That looks better.
+"""
+
+# ╔═╡ 123a49dc-5f8c-11eb-1c59-c5e5715b819f
+md"""
+### Reshaping
+
+Now, we will deal with the fiscal year/calendar year issues. As mentioned earlier, most variables that vary over time have their values reported for four previous years in each of the fiscal year data files. Thus, for these variables we will have four reports of what should be the same value. The values may not be the same if there are any data entry errors or similar problems. Let's begin by checking for this.
+"""
+
+# ╔═╡ 0b1b8522-5f90-11eb-2f9e-91707f735fe6
+let
+	# the Statistics.var function will give errors with Strings
+	numcols = (Symbol(c) for c in names(clean1) if eltype(clean1[!,c]) <: Union{Missing, Number})
+	# replace NaN with missing
+	function variance(x)
+		v=var(skipmissing(x))
+		return(isnan(v) ? missing : v)
+	end
+
+	# display summary stats of within provfs and year variances
+	describe(
+		# compute variance by provfs and year
+		combine(groupby(clean1, [:provfs, :year]),
+			(numcols) .=> variance)
+		)
+end
+
+# ╔═╡ 2beddacc-5f93-11eb-35a0-cfee0361b2eb
+md"""
+The median variance is generally 0---most providers report variables consistently across years. However, there are large outliers. As a simple, but perhaps not best solution, we will use the median across fiscal years of each variable.
+"""
+
+# ╔═╡ 468e9380-5f96-11eb-1e57-9bf6b185cbd1
+clean2=let
 	function combinefiscalyears(x::AbstractArray{T}) where T <: Union{Missing,Number}
 		if all(ismissing.(x))
 			return(missing)
@@ -82,10 +431,167 @@ module Cleaning
 			return(maximum(countmap(skipmissing(x))).first)
 		end
 	end
+	clean2 = combine(groupby(clean1, [:provfs,:year]),
+		names(clean1) .=> combinefiscalyears .=> names(clean1))
+	sort!(clean2, [:provfs, :year])
+end
 
-	upcase(x) = Base.uppercase(x)
-	upcase(m::Missing) = missing	
+# ╔═╡ 2632c508-5f9c-11eb-149b-edb3f5aee983
+md"""
 
+### Defining Needed Variables
+
+Now, let's create the variables we will need.
+
+#### Labor
+
+The labor related variables all end in `FT` (for full-time) or `PT` (for part-time). Create labor as a weighted sum of these variables.
+
+"""
+
+# ╔═╡ 62f7ee18-5f9d-11eb-1b6c-4dabc3f9d787
+filter(x->occursin.(r"(F|P)T$",x.first), datadic) # list variables ending with PT or FT
+
+# ╔═╡ 656f7c7e-5f9d-11eb-041d-a903e70f6843
+md"""
+
+!!! question
+    Modify the code below.
+"""
+
+# ╔═╡ 0926de71-d426-4404-9cd2-80dbaa52ddc2
+md"""
+
+!!! danger "Answer"
+    The modified code is in the cell below.
+
+"""
+
+# ╔═╡ c7c1fdee-5f9c-11eb-00bb-bd871c7f7d92
+clean21 = let 
+		clean2.labor = clean2[!,:socwkFT]*1.0 + clean2[!,:ptcarePT]*0.5 + clean2[!,:dietFT]*1.0 + clean2[!,:nursePT]*0.5 + clean2[!,:socwkPT]*0.5 + clean2[!,:dietPT]*0.5 + clean2[!,:nurseFT]*1.0 + clean2[!,:ptcareFT]*1.0
+        
+		clean2
+end;
+
+# ╔═╡ 70b24c85-dcfb-4ab4-bee9-7ba993686290
+md"""
+
+!!! warning 
+    Pluto's depedency detection and reactivity can be broken by modifying variables in place. Creating a cell that contains only
+    ```julia
+    clean2.labor = clean2[!,:nursePT]*2 
+    ```
+    would be allowed, but Pluto will not recognize that modifying such a cell requires re-running all cells that reference clean2 afterward.
+
+    The somewhat clumsy intermediate dataframes `clean1`, `clean2`, ... help fix the problem. See [this issue for some discussion](https://github.com/fonsp/Pluto.jl/issues/564).
+"""
+
+# ╔═╡ ca02b9ee-5f9d-11eb-14f2-b54ef6111837
+md"""
+#### Hiring
+
+We should create hiring for the control function. There is `panellag` function in `Dialysis.jl` to help doing so.
+
+!!! question
+    Should hiring at time $t$ be $labor_{t} - labor_{t-1}$ or $labor_{t+1}-labor_{t}$? In other words, should it be a backward or forward difference? Check in the paper if needed and modify the code below accordingly.
+"""
+
+# ╔═╡ fdc155a8-93de-4b5e-b0f9-95b1bca504ab
+md"""
+
+!!! danger "Answer"
+    As per Grieco & McDevitt (2017) Section 3.2, the dialysis center observes 	productivity in period $t$ after producing and then makes its hiring decision. The newly hired workers become available at the start of period $t+1$. Therefore hiring at time $t$ should be $labor_{t+1}-labor_{t}$. This is reflected in the code below.
+
+"""
+
+# ╔═╡ 8629935e-5f9e-11eb-0073-7b28899deac5
+clean22 = let
+	clean21.hiring = panellag(:labor,clean21, :provfs, :year, -1) - clean21.labor
+	
+	clean21
+end;
+
+# ╔═╡ 2729eb0a-5fa2-11eb-2176-4fcbb5cb1c44
+md"""
+#### Output
+
+There are a few possible output measures in the data.
+
+CMS observes mortality for most, but possibly not all, dialysis patients. To compute mortality rates, the data reports the number of treated patient-years whose mortality will be observed in column `dy`.
+
+CMS only observes hospitalization for patients whose hospitalization is insured by Medicare. This is a smaller set of patients than those for whom mortality is observed. This number of patient years is in column `hdy`. (If I recall correctly, the output reported by @grieco2017 has summary statistics close to `hdy`).
+
+The column `phd` report patient-months of hemodialysis. My understanding is that this number/12 should be close to `dy`. Since there are other forms of dialysis, `dy` might be larger. On the other hand if there are hemodialysis patients whose mortality is not known, then `phd` could be larger.
+
+There might also be other reasonable variables to measure output that I have missed.
+
+
+!!! question
+    Choose one (or more) measure of output to use in the tables and figures below and any subsequent analysis.
+"""
+
+# ╔═╡ d6e5bb2a-4fe5-4f5e-95e5-3c41e45e98b9
+md"""
+
+!!! danger "Answer"
+    For measures of output, I will use `dy` which measures "patient-years at risk of mortality" and `hdy` which measures "years at risk of hospitalization days". The descriptions for each of these variables come from object `datadic`.
+
+"""
+
+# ╔═╡ edd421a8-c4a3-4fcf-acc9-7f8e90c5537f
+datadic
+
+# ╔═╡ d6305b3a-5f9e-11eb-163d-736097666c33
+md"""
+#### For-profit and chain indicators
+
+!!! question
+    Create a boolean forprofit indicator from the `owner_f` column, and Fresenius and Davita chain indicators from `chainnam`
+"""
+
+# ╔═╡ 23aa2871-9d0b-4d99-a0d9-0fd8ff72a153
+md"""
+
+!!! danger "Answer"
+    Below is the code to create the boolean forprofit indicator. Additionally, code has been added to create the boolean variable for the Davita chain of dialysis centers. I have only created chain dummies for Fresenius and Davita as they have 34,113 and 36,501 centers respectively. There are no other firms that have close to the number of centers that Davita and Fresenius have. Therefore, I will only make dummies for Fresenius and Davita as they are the biggest players in the dialysis market.
+
+"""
+
+# ╔═╡ 5f82fc80-5f9f-11eb-0670-f57b2e1c02fc
+unique(clean2.owner_f)
+
+# ╔═╡ 9180dc5c-5f9f-11eb-1d51-cb0516deb7b5
+countmap(clean2.chainnam)
+
+# ╔═╡ 51012006-5f9f-11eb-1c62-3595a0dbd003
+clean23 = let 
+	clean22.forprofit = (clean22.owner_f .== "For Profit")
+	f(x) = ismissing(x) ? false : occursin(r"(FRESENIUS|FMC)",x)
+	clean22.fresenius = f.(clean22.chainnam)
+	g(x) = ismissing(x) ? false : occursin(r"DAVITA",x)
+	clean22.davita = g.(clean22.chainnam)
+
+	clean22
+	
+end;
+
+# ╔═╡ 0b4f51ca-5fa1-11eb-1466-4959a7e056ae
+md"""
+
+#### State Inspection Rates
+
+State inspection rates are a bit more complicated to create.
+"""
+
+# ╔═╡ 5c8d4f8e-5ff3-11eb-0c55-d1a3795358e3
+clean3 = let 
+	# compute days since most recent inspection
+	inspect = combine(groupby(clean23, :provfs), 
+		:surveydt_f => x->[unique(skipmissing(x))])
+	rename!(inspect, [:provfs, :inspection_dates])
+	df=innerjoin(clean23, inspect, on=:provfs)
+	@assert nrow(df)==nrow(clean23)
 	function dayssince(year, dates) 
 		today = Date(year, 12, 31)
 		past = [x.value for x in today .- dates if x.value>=0]
@@ -96,126 +602,7 @@ module Cleaning
 		end
 	end
 	
-end
-
-# ╔═╡ b5170194-7711-11eb-29e3-b54bef191b1e
-using FixedEffectModels, CategoricalArrays
-
-# ╔═╡ 70fbf634-7781-11eb-2aca-e33cfac2bc00
-using Test
-
-# ╔═╡ 0e285b06-7781-11eb-2594-81071962ac97
-let 	
-	function sim_ols(n; β = ones(3))
-		x = randn(n, length(β))
-  		ϵ = randn(n)
-  		y = x*β + ϵ
-  		return(x,y)
-	end
-	β = ones(2)
-	(x, y) = sim_ols(100; β=β)
-	βols = (x'*x) \ (x'*y)
-
-	function gmm_objective(β)
-  		gi = (y - x*β) .* x
-  		Egi = mean(gi, dims=1) # note that Egi will be 1 × length(β)
-  		error("This is incomplete; you must finish it")
-  		# It is is likely that the code you will write will return a 1 x 1,
-  		# 2 dimensional array. For compatibility with Optim, you need to
-  		# return a scalar. If foo is a 1x1 array, write `foo[1]` to return a scalar instead of
-  		# 1x1 array
-	end
-
-	# minimizer gmm_objective
-	using Optim # github page : https://github.com/JuliaNLSolvers/Optim.jl
-	# docs : http://julianlsolvers.github.io/Optim.jl/stable/
-	res = optimize(gmm_objective,
-  				   zeros(size(β)), # initial value
-	               BFGS(), # algorithm, see http://julianlsolvers.github.io/Optim.jl/stable/
-	               autodiff=:forward)
-  	βgmm = res.minimizer
-	Test.@test βgmm ≈ βols
-	res, βgmm, βols
-end
-
-# ╔═╡ c3feba7a-6a36-11eb-0303-7b823e9867b0
-md"""
-# Reproducing Grieco & McDevitt (2017)
-
-Paul Schrimpf
-
-[UBC ECON567](https://faculty.arts.ubc.ca/pschrimpf/565/565.html)
-
-[![Creative Commons License](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)](http://creativecommons.org/licenses/by-sa/4.0/)
-[Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/)
-"""
-
-# ╔═╡ e85bfc08-7789-11eb-3a9d-b7b7a95b74ae
-md"""
-Download the [notebook file from github](https://raw.githubusercontent.com/UBCECON567/Dialysis/master/docs/pluto/dialysis-2.jl) and open it in Pluto.
-
-!!! tip
-
-    Instead of downloading the notebook manually, you can let Julia download when Pluto starts by entering
-    ```julia
-    Pluto.run(notebook="https://raw.githubusercontent.com/UBCECON567/Dialysis/master/docs/pluto/dialysis-2.jl")
-    ```
-    instead of Pluto.run(). Be sure to save the notebook somewhere on your computer after it opens.
-
-"""
-
-# ╔═╡ b5c489d7-ed76-426b-a508-4cbbe852aece
-Pkg.status()
-
-# ╔═╡ e4fdebf8-6a36-11eb-30d3-dffd45f2943f
-md"""
-# Data Cleaning
-
-We begin by taking the data you created in part 1 of the assignment. You can modify the cell below if you wish (e.g. if you prefer different variable names or definitions).
-"""
-
-# ╔═╡ 3b1eb36e-6a37-11eb-06ac-ef996c61826d
-dialysis, datadic = let 
-	dialysis, datadic = Dialysis.loadDFR(recreate=false)
-	
-	# fix the identifier strings. some years they're listed as ="IDNUMBER", others, they're just IDNUMBER
-	dialysis.provfs = replace.(dialysis.provfs, "="=>"")
-	dialysis.provfs = replace.(dialysis.provfs,"\""=>"")
-	# convert strings to numeric types
-	dialysis=mapcols(Cleaning.converttype, dialysis) 
-
-	
-	dialysis = combine(groupby(dialysis, [:provfs,:year]),
-		names(dialysis) .=> Cleaning.combinefiscalyears .=> names(dialysis))
-	sort!(dialysis, [:provfs, :year])
-	
-	pt = Symbol.(filter(x->occursin.(r"PT$",x),names(dialysis)))
-	ft = Symbol.(filter(x->occursin.(r"FT$",x),names(dialysis)))			
-	dialysis[!,:labor]=sum.(skipmissing(eachrow(dialysis[!,pt])))*0.5 + 
-					   sum.(skipmissing(eachrow(dialysis[!,ft])))
-	
-	dialysis.hiring = panellag(:labor, dialysis, :provfs, :year, -1) - dialysis.labor
-	dialysis.investment = panellag(:totstas_f, dialysis, :provfs, :year, -1) - dialysis.totstas_f
-	
-	
-	dialysis.forprofit = (x->(x=="Unavailable" ? missing : 
-		x=="For Profit")).(dialysis.owner_f)
-	
-	# Chains
-	dialysis.fresenius = (x->(ismissing(x) ? false :
-			occursin(r"(FRESENIUS|FMC)",x))).(dialysis.chainnam)
-	dialysis.davita = (x->(ismissing(x) ? false :
-			occursin(r"(DAVITA)",x))).(dialysis.chainnam)
-	# could add more
-	
-	# State inpection rates
-	inspect = combine(groupby(dialysis, :provfs), 
-		:surveydt_f => x->[unique(skipmissing(x))])
-	rename!(inspect, [:provfs, :inspection_dates])
-	df=innerjoin(dialysis, inspect, on=:provfs)
-	@assert nrow(df)==nrow(dialysis)
-
-	df=transform(df, [:year, :inspection_dates] => (y,d)->Cleaning.dayssince.(y,d))	
+	df=transform(df, [:year, :inspection_dates] => (y,d)->dayssince.(y,d))	
 	rename!(df, names(df)[end] =>:days_since_inspection)
 	df[!,:inspected_this_year] = ((df[!,:days_since_inspection].>=0) .&
 		(df[!,:days_since_inspection].<365))
@@ -224,434 +611,248 @@ dialysis, datadic = let
 	stateRates = combine(groupby(df, [:state, :year]),
                 	:inspected_this_year => 
 			(x->mean(skipmissing(x))) => :state_inspection_rate)
-	# if no inpections in a state in a year then 
-	# mean(skipmissing(x)) will be mean([]) = NaN. 0 makes more sense
-	stateRates.state_inspection_rate[isnan.(stateRates.state_inspection_rate)] .= 0
-	
 	df = innerjoin(df, stateRates, on=[:state, :year])
-	@assert nrow(df)==nrow(dialysis)
-	
-	# competitors
-	df[!,:provcity] = Cleaning.upcase.(df[!,:provcity])
+	@assert nrow(df)==nrow(clean2)
+	df
+end
+
+# ╔═╡ 1d6b90b2-5fa1-11eb-0b52-b36c3642539a
+md"""
+#### Competitors
+
+Creating the number of competitors in the same city is somewhat
+similar. Note that @grieco2017 use the number of competitors in the
+same HSA, which would be preferrable. However, this dataset does not
+contain information on HSAs. If you are feeling ambitious, you could
+try to find data linking city, state to HSA, and use that to calculate
+competitors in the same HSA.
+
+"""
+
+# ╔═╡ 00c8ef48-5ff8-11eb-1cf3-f7d391228226
+clean4=let 
+	df = clean3
+	upcase(x) = Base.uppercase(x)
+	upcase(m::Missing) = missing
+	df[!,:provcity] = upcase.(df[!,:provcity])
 	comps = combine(groupby(df,[:provcity,:year]),
     	       		:dy => 
 			(x -> length(skipmissing(x).>=0.0)) => 
 			:competitors
            )
 	comps = comps[.!ismissing.(comps.provcity),:]
- 	dialysis = outerjoin(df, comps, on = [:provcity,:year], matchmissing=:equal)	
-	@assert nrow(dialysis)==nrow(df)
+ 	df = outerjoin(df, comps, on = [:provcity,:year], matchmissing=:equal)	
+	@assert nrow(df)==nrow(clean3)
+	df
+end
+
+# ╔═╡ 28b76e70-5fa1-11eb-31de-d12718c8de03
+md"""
+
+## Summary Statistics
+
+!!! question
+    Create a table (or multiple tables) similar to Tables 1-3 of @grieco2017.
+    Comment on any notable differences. The following code
+    will help you get started.
+"""
+
+# ╔═╡ 1790c00d-7a67-42db-b116-53e879608eae
+md"""
+
+!!! danger "Answer"
+	Below is the replication of Tables 1-3 from @grieco2017. Before creating the tables we must create variables for "zero net hiring", "zero net investment", "excess mortality", and "time since inspection".
+
+	"Zero net hiring" will be defined as when net hiring is equal to zero. The code for creating the variable is below. 
+
+	"Zero net investment" will be defined as when net investment is equal to zero. I first have to find the net investment which I do in the same manor as when we found hiring earlier. The code to create the dummy variable is below.
+
+	"Excess mortality" is the ratio of actual deaths to expected deaths as per the footnote on Table 1 from @grieco2017. The code to find the ratio is below.
+
+	"Time Since Inspection" is listed in years by @grieco2017 but it is listed in days in the dataset so I will divide the variable by 365 to get years since inspection. The code to do this is below.
+
+"""
+
+# ╔═╡ e66e5ec8-8e92-448c-a659-8f44801adfff
+clean41=let
+	clean4.zero_net_hire = (clean4.hiring .== 0) #Make the zero net hire dummy
 	
-	dialysis, datadic
+	clean4.zero_net_investment = (panellag(:totstas_f, clean4, :provfs, :year, -1) - clean4.totstas_f .== 0) #Make the zero net investment dummy
+
+	clean4.excess_mortality = clean4.dea ./ clean4.exd #Calculate excess mortality as deaths/expected deaths
+
+	clean4.time_since_inspection = clean4.days_since_inspection ./ 365 #convert days since inspected to years since inspection
+	
+	clean4
+	
 end;
 
-# ╔═╡ 3e436bda-6a5e-11eb-3a3f-c94522e2aba1
-describe(dialysis)
+# ╔═╡ a4ae6fb8-5fa1-11eb-1113-a565d047be6d
+let
+	# at the very least, you will need to change this list
+	vars = [:dy, :labor, :hiring, :zero_net_hire, :totstas_f, :zero_net_investment, :sepi, :excess_mortality]
 
-# ╔═╡ 0c93c0f8-7710-11eb-000e-0fba119bd871
+	# You shouldn't neeed to change this function, but you can if you want
+	function summaryTable(df, vars;
+    	                  funcs=[mean, std, x->length(collect(x))],
+	                      colnames=[:Variable, :Mean, :StdDev, :N])
+  		# In case you want to search for information about the syntax used here,
+	  	# [XXX for XXX] is called a comprehension
+  		# The ... is called the splat operator
+  		DataFrame([vars [[f(skipmissing(df[!,v])) for v in vars] for f in funcs]...], colnames)
+	end
+	summaryTable(clean41, vars)
+end
+
+# ╔═╡ 753170e8-4c68-4e1e-ade2-e1e51b7f245c
 md"""
 
-# Quality 
+!!! danger "Answer Continued"
+	Above is my replication for Table 1 from @grieco2017. The major differences between my table and the table from the paper is that `dy` or "patient years  at risk of mortality" is 16 years higher on average in my table as opposed to Grieco and McDevitt's. Furthermore, `labor` or "FTE staff" is lower on average by 1 full-time staff member than in Grieco and McDevitt's table.
 
-Grieco and McDevitt (2017) use the residuals from regressing the infection rate on patient characteristics as a measure of quality. Since the infection rate is a noisy measure of quality, they instrument with the standardized mortality ratio as a second measure of quality. Medicare collects the data we are using in part to create the “Dialysis Facility Compare” website, which is meant to allow consumers to compare quality of dialysis facilities. Browsing around the [Dialysis Facility Compare](https://www.medicare.gov/dialysisfacilitycompare/) or by looking at the first few pages of a [sample Dialysis Facility Report](https://data.cms.gov/Medicare/Sample-Dialysis-Facility-Report-for-Current-Year/82bq-h92z), you will see that there are a number of other variables that Medicare considers indicators of quality. 
+	Below is my replication for Table 2. There does not appear to be information on the number of patients referred by nephrologists in the dataset so I have omitted that variable. One difference between my table and Grieco & McDevitt's is that state inspection rate is reported as a rate rather than a percentage. Additionally, the average time since inspection in my table is 0.5 years higher than in Grieco & McDevitt's table.
 
-!!! question 
-    Pick one of these (it may or may not be included in the extract of data we have), and argue for or against using it instead of or in addition to the septic infection rate and standardized mortality ratio.
+	When creating the table below I had to edit the code slightly to omit missing observations when calculating mean and standard deviation as the values were coming up as NaN. The code to omit missing observations is included in the code to make the table below.
 
 """
 
-# ╔═╡ a179f2e6-7710-11eb-2786-3790a6a86369
+# ╔═╡ fe0702b3-8fc7-4add-b7c9-e6f688408df1
+let
+	# at the very least, you will need to change this list
+	vars = [:state_inspection_rate, :time_since_inspection, :competitors, :forprofit]
+
+	# You shouldn't neeed to change this function, but you can if you want
+	function summaryTable(df, vars;
+    	                  funcs=[y->mean(filter(!isnan, y)), z -> std(filter(!isnan,z)), x->length(collect(x))],
+	                      colnames=[:Variable, :Mean, :StdDev, :N])
+  		# In case you want to search for information about the syntax used here,
+	  	# [XXX for XXX] is called a comprehension
+  		# The ... is called the splat operator
+  		DataFrame([vars [[f(skipmissing(df[!,v])) for v in vars] for f in funcs]...], colnames)
+	end
+	summaryTable(clean41, vars)
+end
+
+# ╔═╡ a54d12d1-9389-46a3-9923-4543ce444b45
 md"""
 
-"""
-
-# ╔═╡ f8a531da-770f-11eb-3564-23e339ffdeb1
-md"""
-There are a number of Julia packages that can be used for regression. I like [`FixedEffectModels`](https://github.com/FixedEffects/FixedEffectModels.jl). As the name suggests, it is focused on fixed effect models, but also works for regressions without fixed effects. It is written by economists, so it has features that economists use a lot --- convenient ways to get robust and/or clustered standard errors, and good support for IV. The [`GLM`](https://juliastats.org/GLM.jl/stable/) package is a reasonable alternative. 
-
-Usage of FixedEffectModels is fairly similar to R, in that it has a formula interface for constructing `X` matrices from a `DataFrame`. 
-"""
-
-# ╔═╡ de6dc514-7711-11eb-2c01-bfd2d49bfe43
-sort(datadic)
-
-# ╔═╡ 442c71b8-6a5e-11eb-1dda-8b6b4c760f53
-begin
+!!! danger "Answer Continued"
 	
-	dialysis[!,:idcat] =  categorical(dialysis[!,:provfs])
-	# FixedEffectModels requires clustering and fixed effect variables to
-	# be categorical
+	Below is my replication for Table 3. The percentage of patients with AV fistulas is 12 percentage points higher in my table. Patients also have 1.4 additional comorbidities on average in my table as compared to Grieco & McDevitt's. Finally, average haemoglobin levels are lower in the 2008-2019 sample.
 
-	qreg = reg(dialysis, @formula(sepi ~ days_since_inspection + age +
-	    	                          sex + vin + ppavf + 
-									  clmcntcom +
-                	                  hgm),
-		       		Vcov.cluster(:idcat),
-		       		save=true) # saves residuals 
-	dialysis[!,:quality] = -qreg.residuals
-	dialysis1=dialysis
-	qreg
+"""
+
+# ╔═╡ fdd29235-5ae5-4e9d-be11-8d39bd6b2b6e
+let
+	# at the very least, you will need to change this list
+	vars = [:age, :sex, :ppavf, :clmcntcom, :vin, :hgm]
+
+	# You shouldn't neeed to change this function, but you can if you want
+	function summaryTable(df, vars;
+    	                  funcs=[mean, std, x->length(collect(x))],
+	                      colnames=[:Variable, :Mean, :StdDev, :N])
+  		# In case you want to search for information about the syntax used here,
+	  	# [XXX for XXX] is called a comprehension
+  		# The ... is called the splat operator
+  		DataFrame([vars [[f(skipmissing(df[!,v])) for v in vars] for f in funcs]...], colnames)
+	end
+	summaryTable(clean41, vars)
 end
 
-# ╔═╡ fda20dc0-e906-4c75-a28f-0ffa1b68232c
-describe(qreg.residuals)
+# ╔═╡ 7bfe6fee-5fa3-11eb-3f31-59a77a78f035
+md"""
 
-# ╔═╡ 00cae6b8-7731-11eb-258a-f1795edc3190
-md""" 
-# OLS and Fixed Effects Estimates
-
+## Figures
 
 !!! question
-    Reproduce columns 2,3, 5, and 6 of Table 5. The syntax for fixed effects regression is shown below. Be sure to add the other columns. If you’d like, you could use [RegressionTables.jl](https://github.com/jmboehm/RegressionTables.jl) to produce tables that look a lot like the ones in the paper.
+    Create some figures to explore the data. Try to
+    be creative.  Are there any strange patterns or other obvious
+    problems with the data?
 """
 
-# ╔═╡ 51460370-7731-11eb-13be-a9c361b59e11
-begin
-	# -Inf causes as error in reg()
-	log_infmiss = x->ifelse(!ismissing(x) && x>0, log(x), missing) 
-
-	dialysis2 = let
-		dialysis = dialysis1
-		dialysis[!,:lpy] = log_infmiss.(dialysis[!,:dy]) # or hdy or phd?
-		dialysis[!,:logL] = log_infmiss.(dialysis[!,:labor])
-		dialysis[!,:logK] = log_infmiss.(dialysis[!,:totstas_f])
-		dialysis
-	end
-	# you may want to restrict sample to match sample that can be 
-	# used in control function estimates 
-	reg(dialysis, @formula(lpy ~ quality + logK + logL + fe(idcat)),
-		Vcov.cluster(:idcat))
-end
-
-# ╔═╡ 546b2e76-7732-11eb-0b27-1bc2d7c1e576
+# ╔═╡ 19fecb37-ad0a-417d-ab93-de8f7ebfc4bf
 md"""
-```math
-\def\indep{\perp\!\!\!\perp}
-\def\Er{\mathrm{E}}
-\def\R{\mathbb{R}}
-\def\En{{\mathbb{E}_n}}
-\def\Pr{\mathrm{P}}
-\newcommand{\norm}[1]{\left\Vert {#1} \right\Vert}
-\newcommand{\abs}[1]{\left\vert {#1} \right\vert}
-\DeclareMathOperator*{\argmax}{arg\,max}
-\DeclareMathOperator*{\argmin}{arg\,min}
-\def\inprob{\,{\buildrel p \over \rightarrow}\,}
-\def\indist{\,{\buildrel d \over \rightarrow}\,}
-```
 
-# Estimation of α
+!!! danger "Answer"
+	
+	Below are two graphs, the first shows the relationship between each firm's labour and their output `dy`. The second shows the relationship between the number of dialysis stations per firm and the output of each firm `dy`.
 
-As discussed in section 5 of @grieco2017, the coefficient on quality,
-$\alpha$, is estimated from
+	I have created a slider that filters the graphs to only show observations for the selected year.
 
-```math
-y_{jt} = \alpha q_{jt} + \Phi(\underbrace{h_{jt}, k_{jt}, l_{jt}, x_{jt}}_{w_{jt}}) +
-\epsilon_{jt}
-```
+	It can be seen that the relationship between output and labour as well as between output and capital (number of stations) is more or less constant over the time span of the dataset. This would lead me to believe that there were no significant productivity shocks to labour or capital faced by dialysis firms between 2008 and 2019. I also decided to make the distinction between for profit and non-profit firms as there may be differing incentives for adopting new technologies.
 
-with a second noisy measure of quality, $z_{jt}$, used to instrument
-for $q_{jt}$. To estimate $\alpha$, first the exogenous variables,
-$w$, can be partialed out to give:
-
-```math
-y_{jt} - \Er[y_{jt} | w_{jt} ] = \alpha (q_{jt} - \Er[q_{jt}|w_{jt}]) +
-\epsilon_{jt}
-```
-
-where we used the assumption that $\Er[\epsilon_{jt} | w_{jt} ] = 0$
-and the fact that $\Er[\Phi(w) | w] = \Phi(w)$. Under the assumption
-that $\Er[\epsilon| z, w] = 0$, we can estimate $\alpha$ based on the
-moment condition:
-
-```math
-\begin{align*}
-0 = & \Er[\epsilon f(z,w) ] \\
-0 = & \Er\left[ \left(y_{jt} - \Er[y_{jt} | w_{jt} ] - \alpha
-(q_{jt} - \Er[q_{jt}|w_{jt}])\right) f(z_{jt},w_{jt}) \right]
-\end{align*}
-```
-
-If $Var(\epsilon|z,w)$ is constant, the efficient choice of $f(z,w)$
-is
-
-```math
-\Er[\frac{\partial \epsilon}{\partial \alpha} |z, w ] = \Er[q| z, w] - \Er[q|w]
-```
-
-To estimate $\alpha$, we simply replace these conditional expectations with
-regression estimates, and replace the unconditional expectation with a
-sample average. Let $\hat{\Er}[y|w]$ denote a nonparmetric estimate of
-the regression of $y$ on $w$. Then,
-
-```math
-\hat{\alpha} = \frac{\sum_{j,t} (y_{jt} -
-\hat{E}[y|w_{jt}])(\hat{E}[q|z_{jt},w_{jt}] - \hat{E}[q|w_{jt}])}
-{\sum_{j,t} (q_{jt} - \hat{E}[q|w_{jt}])(\hat{E}[q|z_{jt},w_{jt}] - \hat{E}[q|w_{jt}])}
-```
-
-The function `partiallinearIV` in Dialysis.jl will estimate this
-model. Also included are two methods for estimating
-$\hat{E}[y|w]$. `polyreg` estimates a polynomial series regression,
-that is it regresses $y$ on a polynomial of degree $d$ in $w$. To
-allow the regression to approximate any function, the degree must
-increase with the sample size, but to control variance, the degree must
-not increase too quickly. We will not worry too much about the choice
-of degree here.
-
-An alternative method (and what @grieco2017 used) is
-local linear regression. To estimate $\hat{E}[y|x_{jt}]$, local linear
-regression estimates a linear regression of $y$ on $x$, but weights
-observations by how close $x_{it}$ is to $x_{jt}$. That is,
-
-```math
-\hat{E}[y|x_{jt}] = x_{jt} \hat{\beta}(x_jt)
-```
-
-where
-
-```math
-\hat{\beta}(x_{jt}) = \argmin_\beta \sum_{i,t} (y_{it} -
-x_{it}\beta)^2 k((x_{it} - x_{jt})/h_n)
-```
-
-Here $k()$ is some function with its maximum at 0 (and has some other
-properties), like $k(x) \propto e^{-x^2}$. The bandwidth, $h_n$,
-determines how much weight to place on observations close to vs far
-from $x_{jt}$. Similar to the degree in polynomial regression, the
-bandwidth must decrease toward 0 with sample size allow local linear
-regression to approximate any function, but to control variance the
-bandwidth must not decrease too quickly. We will not worry too much
-about the choice of bandwidth. Anyway, the function `locallinear` in
-Dialysis.jl estimates a local linear regression.
 """
 
-# ╔═╡ 91e11e7a-7780-11eb-033e-efe7415b20ac
+# ╔═╡ 96bc9ea6-2f65-4e9c-981f-4027458c8a21
+md"Year: 2008 $(@bind year Slider(2008:2019)) 2019"
+
+# ╔═╡ 73c4d839-24d6-47dc-9114-8853ab9729d4
+df1 = filter(:year => y -> y==year, clean41);
+
+# ╔═╡ 7bd3ca07-6818-411e-aa7e-a26c3239f530
+    @df df1 scatter(
+	:labor,
+    :dy,
+    group = :forprofit,
+    title = year,
+    xlabel = "Labour",
+    ylabel = "Output (dy)",
+	labels = ["Non-Profit" "For Profit"],
+	xlim = [0,200],
+	ylim = [0,500]
+)
+
+# ╔═╡ 4696424d-f7ac-4733-88b6-2b804e4f26d1
+    @df df1 scatter(
+	:totstas_f,
+    :dy,
+    group = :forprofit,
+    title = year,
+    xlabel = "Stations",
+    ylabel = "Output (dy)",
+	labels = ["Non-Profit" "For Profit"],
+	xlim = [0,200],
+	ylim = [0,500]
+)
+
+# ╔═╡ c09dd940-5ff9-11eb-0db4-bf9f169c5508
 md"""
+
 !!! question
-    Estimate $\alpha$ using the following code. You may want to modify
-    some aspects of it and/or report estimates of $\alpha$ for different
-    choices of instrument, nonparametric estimation method, degree or
-    bandwidth. Compare your estimate(s) of $\alpha$ with the ones in
-    Tables 5 and 6 of @grieco2017.
+    Please hand in both your modified `dialysis-1.jl` and an html export of it. Use the triangle and circle icon at the top of the page to export it.
 """
 
-# ╔═╡ e4a73dac-777f-11eb-20e7-99da9a11f1af
-begin 
-	# create indicator for observations usable in estimation of α
-	dialysis3 = let
-		dialysis = dialysis2
-		inc1 = ((dialysis[!,:dy] .> 0) .& (dialysis[!,:labor] .> 0) .&
-    	       (dialysis[!,:totstas_f] .> 0) .&
-        	   .!ismissing.(dialysis[!,:quality]) .&
-           		.!ismissing.(dialysis[!,:smr]) .&
-           		(dialysis[!,:investment].==0) .&
-	           	(dialysis[!,:hiring].!=0))
-		inc1[ismissing.(inc1)] .= false
-		dialysis[!,:inc1] = inc1
-		dialysis[!,:lsmr] = log.(dialysis[!,:smr] .+ .01)
-		dialysis
-	end
-	# As degree → ∞ and/or bandwidth → 0, whether we use :std_mortality or
-	# some transformation as the instrument should not matter. However,
-	# for fixed degree or bandwidth it will have some (hopefully small)
-	# impact.
-
-	(α, Φ, αreg, eyqz)=partiallinearIV(:lpy,  # y
-    	                     :quality, # q
-        	                 :lsmr,   # z
-            	             [:hiring, :logL, :logK,
-                	         :state_inspection_rate, :competitors], # w
-                    	     dialysis[findall(dialysis[!,:inc1]),:];
-                        	 npregress=(xp, xd,yd)->polyreg(xp,xd,yd,degree=1),
-                         	parts=true
-                         	# You may want to change the degree here
-                         	#
-                         	# You could also change `polyreg`  to
-                         	# `locallinear` and `degree` to
-                         	# `bandwidthmultiplier`
-                         	#
-                         	# locallinear will likely take some time to
-                         	# compute (≈350 seconds on my computer)
-                         	)
-	dialysis4 = let
-		dialysis = dialysis3	
-		# we will need these later in step 2
-		dialysis[!,:Φ] = similar(dialysis[!,:lpy])
-		dialysis[:,:Φ] .= missing
-		rows = findall(dialysis[!,:inc1])
-		dialysis[rows,:Φ] = Φ
-		dialysis[!,:ey] = similar(dialysis[!,:lpy])
-		dialysis[:,:ey] .= missing
-		dialysis[rows,:ey] = eyqz[:,1]
-		dialysis[!,:eq] = similar(dialysis[!,:lpy])
-		dialysis[:,:eq] .= missing
-		dialysis[rows,:eq] = eyqz[:,2]
-		dialysis[!,:ez] = similar(dialysis[!,:lpy])
-		dialysis[:,:ez] .= missing
-		dialysis[rows,:ez] = eyqz[:,3]
-		dialysis
-	end
-	α
-end
-
-# ╔═╡ ae691f34-7780-11eb-2196-3b4b000f6bee
-md"""
-# Brief introduction to GMM
-
-The coefficients on labor and capital are estimated by GMM. The idea
-of GMM is as follows. We have a model that implies
-
-```math
-\Er[c(y,x;\theta) | z ] = 0
-```
-
-where $y$, $x$, and $z$ are observed variables. $c(y,x;\theta)$ is
-some known function of the data and some parameters we want to
-estimate, $\theta$. Often, $c(y,x;\theta)$ are the residuals from some
-equation. For example, for linear IV, we'd have
-```math
-c(y,x;\theta) = y - x\theta 
-```
-The conditional moment restriction above implies that
-
-```math
-\Er[c(y,x;\theta)f(z) ] = 0
-```
-for any function $f()$. We can then estimate $\theta$ by replacing the
-population expectation with a sample average and finding
-$\hat{\theta}$ such that
-```math
-\En[c(y,x;\hat{\theta})f(z) ] \approx 0
-```
-The dimension of $f(z)$ should be greater than or equal to the
-dimension of $\theta$, so we have at least as many equations as
-unknowns. We find this $\hat{\theta}$ by minimizing a quadratic form
-of these equations. That is,
-```math
-\hat{\theta} = \argmin_\theta \En[g_i(\theta)] W_n \En[g_i(\theta)]'
-```
-were $g_i(\theta) = c(y_i, x_i;\theta)f(z_i)$, and $W_n$ is some
-positive definite weighting matrix.
-"""
-
-# ╔═╡ e1212ed0-7780-11eb-0606-af5ba16a2316
+# ╔═╡ cdf953eb-a153-42de-8f75-adbddccd634f
 md"""
 
-!!! question 
-    As practice with GMM, use it to estimate a simple regression model,
-    ```math
-    y = x\beta + \epsilon
-    ```
-    assuming $\Er[\epsilon|x] = 0$. Test your code on simulated data. The
-    following will help you get started.
+!!! danger "Answer"
+	
+	Done! :)
+
 """
-
-# ╔═╡ fae052fa-7781-11eb-09de-65aec4c5666a
-md"""
-# Estimating $\beta$
-
-The model
-implies that
-```math
-\omega_{jt} = \Phi(w_{jt}) - \beta_k k_{jt} - \beta_l l_{jt}
-```
-and
-```math
-y_{jt} - \alpha q_{jt} - \beta_k k_{jt} - \beta_l l_{jt} =
-g(\omega_{jt-1}) + \eta_{jt}
-``` 
-The timing and exogeneity assumptions imply that
-```math
-\Er[\eta_{jt} | k_{jt}, l_{jt}, w_{jt-1}]
-```
-Given a value of $\beta$, and our above estimates of $\Phi$ and
-$\alpha$, we can compute $\omega$ from the equation above, and then estimate
-$g()$ and $\eta$ by a nonparametric regression of
-$y_{jt} - \alpha q_{jt} - \beta_k k_{jt} - \beta_l l_{jt}$ on
-$\omega_{jt-1}$. $\beta$ can then be estimated by finding the value of
-$\beta$ that comes closest to satisfying the moment condition
-```math
-\Er[\eta(\beta)_{jt} k_{jt}] = 0 \text{ and } \Er[\eta(\beta)_{jt} l_{jt}]
-= 0
-```
-To do this, we minimize
-```math
-Q_n(\beta) = \left( \frac{1}{N} \sum_{j,t} \eta(\beta)_{jt} (k_{jt}, l_{jt}) \right) W_n
-\left( \frac{1}{N} \sum_{j,t} \eta(\beta)_{jt} (k_{jt}, l_{jt}) \right)'
-```
-"""
-
-
-# ╔═╡ 36b69d3e-7782-11eb-3ff2-873f88e0c02d
-md"""
-!!! question 
-    Write the body of the $Q_n(\beta)$ function below. Use it to estimate
-    $\beta$. Compare your results with those of @grieco2017. Optionally,
-    explore robustness of your results to changes in the specification.    
-"""
-
-# ╔═╡ 574881ac-7782-11eb-06b9-d927413d0fb7
-Qn = let
-	(ωfunc, ηfunc) = errors_gm(:lpy, :logK, :logL, :quality, :Φ, :provfs, :year,
-    	                       dialysis, α; degree=1)
-	function Qn(β)
-  		η = ηfunc(β) # note that η will be vector of length = size(dialysis,1)
-		             # η will include missings 
-		error("You must write the body of this function")
-	end
-end
-
-# ╔═╡ e7c0bff8-7785-11eb-025f-c3a86f0ae20e
-begin
-	out = []
-	PlutoUI.with_terminal() do 
-		# with_terminal is broken, see 
-	    # https://github.com/JuliaPluto/PlutoUI.jl/issues/196
-		# you could remove the PlutoUI.with_terminal() and look for the optimizer output in your Julia REPL instead
-		res = optimize(Qn,    # objective
-	     	          [0.0, 0.0], # lower bounds, should not be needed, but
-    	    	      # may help numerical performance
-	                  [1.0, 1.0], # upper bounds
-	                  [0.4, 0.2], # initial value
-	                  Fminbox(BFGS()),  # algorithm
-	                  autodiff=:forward, 
-		              Optim.Options(show_trace=true))
-		@show res
-	    @show res.minimizer
-		push!(out,res)
-	end
-end
-
-# ╔═╡ 98a54b7c-7786-11eb-21f6-21d8e645491b
-β̂ = out[1].minimizer
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
-CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Dialysis = "9b71aec8-1451-11e9-12ed-579ec60579c4"
-FixedEffectModels = "9d5cd8c9-2029-5cab-9928-427838db53e3"
-Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+VegaLite = "112f6efa-9a02-5b7d-90c0-432ed331239a"
 
 [compat]
-CategoricalArrays = "~0.10.2"
-DataFrames = "~1.3.2"
+DataFrames = "~1.4.4"
 Dialysis = "~0.1.0"
-FixedEffectModels = "~1.6.4"
-Optim = "~1.6.0"
-Plots = "~1.25.5"
-PlutoUI = "~0.7.32"
-StatsBase = "~0.33.14"
-StatsPlots = "~0.14.30"
+Plots = "~1.38.1"
+PlutoUI = "~0.7.49"
+StatsBase = "~0.33.21"
+StatsPlots = "~0.15.4"
+VegaLite = "~2.6.0"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -660,7 +861,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.5"
 manifest_format = "2.0"
-project_hash = "304b4ecb0719d5f05bd5f7556d56ea661d573c17"
+project_hash = "a27044a7b418a89ed3b7cef287477eb262af391e"
 
 [[deps.AbstractFFTs]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -696,12 +897,6 @@ git-tree-sha1 = "5ba6c757e8feccf03a1554dfaf3e26b3cfc7fd5e"
 uuid = "68821587-b530-5797-8361-c406ea357684"
 version = "3.5.1+1"
 
-[[deps.ArrayInterfaceCore]]
-deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
-git-tree-sha1 = "14c3f84a763848906ac681f94cf469a851601d92"
-uuid = "30b0a656-2188-435a-8636-2ec0e6a096e2"
-version = "0.1.28"
-
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 
@@ -713,6 +908,11 @@ version = "1.0.1"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[deps.BitFlags]]
+git-tree-sha1 = "43b1a4a8f797c1cddadf60499a8a077d4af2cd2d"
+uuid = "d1d4a3ce-64b1-5f1a-9ba4-7e7e69966f35"
+version = "0.1.7"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -737,12 +937,6 @@ deps = ["LinearAlgebra"]
 git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
 uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
 version = "0.5.1"
-
-[[deps.CategoricalArrays]]
-deps = ["DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
-git-tree-sha1 = "5084cc1a28976dd1642c9f337b28a3cb03e0f7d2"
-uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
-version = "0.10.7"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
@@ -804,10 +998,10 @@ uuid = "bbf7d656-a473-5ed7-a52c-81e309532950"
 version = "0.3.0"
 
 [[deps.Compat]]
-deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "SHA", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "78bee250c6826e1cf805a88b7f1e86025275d208"
+deps = ["Dates", "LinearAlgebra", "UUIDs"]
+git-tree-sha1 = "00a2cccc7f098ff3b66806862d275ca3db9e6e5a"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "3.46.0"
+version = "4.5.0"
 
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -821,10 +1015,9 @@ uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
 version = "1.4.1"
 
 [[deps.Contour]]
-deps = ["StaticArrays"]
-git-tree-sha1 = "9f02045d934dc030edad45944ea80dbd1f0ebea7"
+git-tree-sha1 = "d05d9e7b7aedff4e5b51a029dced05cfb6125781"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
-version = "0.5.7"
+version = "0.6.2"
 
 [[deps.Crayons]]
 git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
@@ -837,10 +1030,10 @@ uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.14.0"
 
 [[deps.DataFrames]]
-deps = ["Compat", "DataAPI", "Future", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Reexport", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
-git-tree-sha1 = "db2a9cb664fcea7836da4b414c3278d71dd602d2"
+deps = ["Compat", "DataAPI", "Future", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Random", "Reexport", "SnoopPrecompile", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
+git-tree-sha1 = "d4f69885afa5e6149d0cab3818491565cf41446d"
 uuid = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-version = "1.3.6"
+version = "1.4.4"
 
 [[deps.DataStructures]]
 deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
@@ -924,22 +1117,11 @@ git-tree-sha1 = "5837a837389fccf076445fce071c8ddaea35a566"
 uuid = "fa6b7ba4-c1ee-5f82-b5fc-ecf0adba8f74"
 version = "0.6.8"
 
-[[deps.EarCut_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "e3290f2d49e661fbd94046d7e3726ffcb2d41053"
-uuid = "5ae413db-bbd1-5e63-b57d-d24a61df00f5"
-version = "2.2.4+0"
-
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "bad72f730e9e91c08d9427d5e8db95478a3c323d"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
 version = "2.4.8+0"
-
-[[deps.Extents]]
-git-tree-sha1 = "5e1e4c53fa39afe63a7d356e30452249365fba99"
-uuid = "411431e0-e8b7-467b-b5e0-f676ba4f2910"
-version = "0.1.1"
 
 [[deps.FFMPEG]]
 deps = ["FFMPEG_jll"]
@@ -965,6 +1147,18 @@ git-tree-sha1 = "c6033cc3892d0ef5bb9cd29b7f2f0331ea5184ea"
 uuid = "f5851436-0d7a-5f13-b9de-f02708fd171a"
 version = "3.3.10+0"
 
+[[deps.FileIO]]
+deps = ["Pkg", "Requires", "UUIDs"]
+git-tree-sha1 = "7be5f99f7d15578798f338f5433b6c432ea8037b"
+uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+version = "1.16.0"
+
+[[deps.FilePaths]]
+deps = ["FilePathsBase", "MacroTools", "Reexport", "Requires"]
+git-tree-sha1 = "919d9412dbf53a2e6fe74af62a73ceed0bce0629"
+uuid = "8fc22ac5-c921-52a6-82fd-178b2807b824"
+version = "0.8.3"
+
 [[deps.FilePathsBase]]
 deps = ["Compat", "Dates", "Mmap", "Printf", "Test", "UUIDs"]
 git-tree-sha1 = "e27c4ebe80e8699540f2d6c805cc12203b614f12"
@@ -980,17 +1174,11 @@ git-tree-sha1 = "9a0472ec2f5409db243160a8b030f94c380167a3"
 uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
 version = "0.13.6"
 
-[[deps.FiniteDiff]]
-deps = ["ArrayInterfaceCore", "LinearAlgebra", "Requires", "Setfield", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "04ed1f0029b6b3af88343e439b995141cb0d0b8d"
-uuid = "6a86dc24-6348-571c-b903-95158fe2bd41"
-version = "2.17.0"
-
 [[deps.FixedEffectModels]]
-deps = ["DataFrames", "FixedEffects", "LinearAlgebra", "Printf", "Reexport", "Statistics", "StatsBase", "StatsFuns", "StatsModels", "Tables", "Vcov"]
-git-tree-sha1 = "5ce2c7040b58546652b58284ea52a7233f05a95f"
+deps = ["DataFrames", "FixedEffects", "LinearAlgebra", "Printf", "Reexport", "Statistics", "StatsAPI", "StatsBase", "StatsFuns", "StatsModels", "Tables", "Vcov"]
+git-tree-sha1 = "fe8ff72b50e10e545e0beea0679fdf36afb4f1f3"
 uuid = "9d5cd8c9-2029-5cab-9928-427838db53e3"
-version = "1.6.7"
+version = "1.7.0"
 
 [[deps.FixedEffects]]
 deps = ["GroupedArrays", "LinearAlgebra", "Printf", "Requires", "StatsBase"]
@@ -1044,35 +1232,17 @@ git-tree-sha1 = "d972031d28c8c8d9d7b41a536ad7bb0c2579caca"
 uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
 version = "3.3.8+0"
 
-[[deps.GPUArraysCore]]
-deps = ["Adapt"]
-git-tree-sha1 = "6872f5ec8fd1a38880f027a26739d42dcda6691f"
-uuid = "46192b85-c4d5-4398-a991-12ede77f4527"
-version = "0.1.2"
-
 [[deps.GR]]
-deps = ["Base64", "DelimitedFiles", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Pkg", "Printf", "Random", "RelocatableFolders", "Serialization", "Sockets", "Test", "UUIDs"]
-git-tree-sha1 = "c98aea696662d09e215ef7cda5296024a9646c75"
+deps = ["Artifacts", "Base64", "DelimitedFiles", "Downloads", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Pkg", "Preferences", "Printf", "Random", "Serialization", "Sockets", "TOML", "Tar", "Test", "UUIDs", "p7zip_jll"]
+git-tree-sha1 = "387d2b8b3ca57b791633f0993b31d8cb43ea3292"
 uuid = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
-version = "0.64.4"
+version = "0.71.3"
 
 [[deps.GR_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Cairo_jll", "FFMPEG_jll", "Fontconfig_jll", "GLFW_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pixman_jll", "Pkg", "Qt5Base_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "bc9f7725571ddb4ab2c4bc74fa397c1c5ad08943"
+git-tree-sha1 = "5982b5e20f97bff955e9a2343a14da96a746cd8c"
 uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
-version = "0.69.1+0"
-
-[[deps.GeoInterface]]
-deps = ["Extents"]
-git-tree-sha1 = "e315c4f9d43575cf6b4e511259433803c15ebaa2"
-uuid = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
-version = "1.1.0"
-
-[[deps.GeometryBasics]]
-deps = ["EarCut_jll", "GeoInterface", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
-git-tree-sha1 = "fe9aea4ed3ec6afdfbeb5a4f39a2208909b162a6"
-uuid = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
-version = "0.4.5"
+version = "0.71.3+0"
 
 [[deps.Gettext_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "XML2_jll"]
@@ -1104,10 +1274,10 @@ uuid = "6407cd72-fade-4a84-8a1e-56e431fc1533"
 version = "0.3.3"
 
 [[deps.HTTP]]
-deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
-git-tree-sha1 = "0fa77022fe4b511826b39c894c90daf5fce3334a"
+deps = ["Base64", "CodecZlib", "Dates", "IniFile", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
+git-tree-sha1 = "eb5aa5e3b500e191763d35198f859e4b40fff4a6"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "0.9.17"
+version = "1.7.3"
 
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg"]
@@ -1161,10 +1331,10 @@ deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
 [[deps.Interpolations]]
-deps = ["AxisAlgorithms", "ChainRulesCore", "LinearAlgebra", "OffsetArrays", "Random", "Ratios", "Requires", "SharedArrays", "SparseArrays", "StaticArrays", "WoodburyMatrices"]
-git-tree-sha1 = "b7bc05649af456efc75d178846f47006c2c4c3c7"
+deps = ["Adapt", "AxisAlgorithms", "ChainRulesCore", "LinearAlgebra", "OffsetArrays", "Random", "Ratios", "Requires", "SharedArrays", "SparseArrays", "StaticArrays", "WoodburyMatrices"]
+git-tree-sha1 = "721ec2cf720536ad005cb38f50dbba7b02419a15"
 uuid = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
-version = "0.13.6"
+version = "0.14.7"
 
 [[deps.InverseFunctions]]
 deps = ["Test"]
@@ -1182,15 +1352,16 @@ git-tree-sha1 = "7fd44fd4ff43fc60815f8e764c0f352b83c49151"
 uuid = "92d709cd-6900-40b7-9082-c6be49f344b6"
 version = "0.1.1"
 
-[[deps.IterTools]]
-git-tree-sha1 = "fa6287a4469f5e048d763df38279ee729fbd44e5"
-uuid = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
-version = "1.4.0"
-
 [[deps.IteratorInterfaceExtensions]]
 git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
 uuid = "82899510-4779-5014-852e-03e436cf321d"
 version = "1.0.0"
+
+[[deps.JLFzf]]
+deps = ["Pipe", "REPL", "Random", "fzf_jll"]
+git-tree-sha1 = "f377670cda23b6b7c1c0b3893e37451c5c1a2185"
+uuid = "1019f520-868f-41f5-a6de-eb00f4b6a39c"
+version = "0.1.5"
 
 [[deps.JLLWrappers]]
 deps = ["Preferences"]
@@ -1203,6 +1374,12 @@ deps = ["Dates", "Mmap", "Parsers", "Unicode"]
 git-tree-sha1 = "3c837543ddb02250ef42f4738347454f95079d4e"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.3"
+
+[[deps.JSONSchema]]
+deps = ["HTTP", "JSON", "URIs"]
+git-tree-sha1 = "8d928db71efdc942f10e751564e6bbea1e600dfe"
+uuid = "7d188eb4-7ad8-530c-ae41-71a32a6d4692"
+version = "1.0.1"
 
 [[deps.JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1319,12 +1496,6 @@ git-tree-sha1 = "7f3efec06033682db852f8b3bc3c1d2b0a0ab066"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
-[[deps.LineSearches]]
-deps = ["LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "Printf"]
-git-tree-sha1 = "7bbea35cec17305fc70a0e5b4641477dc0789d9d"
-uuid = "d3d80556-e9d4-5f37-9878-2ab0fcc64255"
-version = "7.2.0"
-
 [[deps.LinearAlgebra]]
 deps = ["Libdl", "libblastrampoline_jll"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -1337,6 +1508,12 @@ version = "0.3.19"
 
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
+
+[[deps.LoggingExtras]]
+deps = ["Dates", "Logging"]
+git-tree-sha1 = "cedb76b37bc5a6c702ade66be44f831fa23c681e"
+uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
+version = "1.0.0"
 
 [[deps.MIMEs]]
 git-tree-sha1 = "65f28ad4b594aebe22157d6fac869786a255b7eb"
@@ -1389,16 +1566,10 @@ uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2022.2.1"
 
 [[deps.MultivariateStats]]
-deps = ["Arpack", "LinearAlgebra", "SparseArrays", "Statistics", "StatsBase"]
-git-tree-sha1 = "6d019f5a0465522bbfdd68ecfad7f86b535d6935"
+deps = ["Arpack", "LinearAlgebra", "SparseArrays", "Statistics", "StatsAPI", "StatsBase"]
+git-tree-sha1 = "efe9c8ecab7a6311d4b91568bd6c88897822fabe"
 uuid = "6f286f6a-111f-5878-ab1e-185364afe411"
-version = "0.9.0"
-
-[[deps.NLSolversBase]]
-deps = ["DiffResults", "Distributed", "FiniteDiff", "ForwardDiff"]
-git-tree-sha1 = "a0b464d183da839699f4c79e7606d9d186ec172c"
-uuid = "d41bc354-129a-5804-8e4c-c37616107c6c"
-version = "7.8.3"
+version = "0.10.0"
 
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
@@ -1416,10 +1587,16 @@ version = "0.4.13"
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.2.0"
 
+[[deps.NodeJS]]
+deps = ["Pkg"]
+git-tree-sha1 = "905224bbdd4b555c69bb964514cfa387616f0d3a"
+uuid = "2bd173c7-0d6d-553b-b6af-13a54713934c"
+version = "1.3.0"
+
 [[deps.Observables]]
-git-tree-sha1 = "fe29afdef3d0c4a8286128d4e45cc50621b1e43d"
+git-tree-sha1 = "6862738f9796b3edc1c09d0890afce4eca9e7e93"
 uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
-version = "0.4.0"
+version = "0.5.4"
 
 [[deps.OffsetArrays]]
 deps = ["Adapt"]
@@ -1443,6 +1620,12 @@ deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
 version = "0.8.1+0"
 
+[[deps.OpenSSL]]
+deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "OpenSSL_jll", "Sockets"]
+git-tree-sha1 = "6503b77492fd7fcb9379bf73cd31035670e3c509"
+uuid = "4d8831e6-92b7-49fb-bdf8-b643e874388c"
+version = "1.3.3"
+
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "f6e9dba33f9f2c44e08a020b0caf6903be540004"
@@ -1454,12 +1637,6 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pk
 git-tree-sha1 = "13652491f6856acfd2db29360e1bbcd4565d04f1"
 uuid = "efe28fd5-8261-553b-a9e1-b2916fc3738e"
 version = "0.5.5+0"
-
-[[deps.Optim]]
-deps = ["Compat", "FillArrays", "ForwardDiff", "LineSearches", "LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "PositiveFactorizations", "Printf", "SparseArrays", "StatsBase"]
-git-tree-sha1 = "bc0a748740e8bc5eeb9ea6031e6f050de1fc0ba2"
-uuid = "429524aa-4258-5aef-a3af-852621145aeb"
-version = "1.6.2"
 
 [[deps.Opus_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1483,17 +1660,16 @@ git-tree-sha1 = "cf494dca75a69712a72b80bc48f59dcf3dea63ec"
 uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
 version = "0.11.16"
 
-[[deps.Parameters]]
-deps = ["OrderedCollections", "UnPack"]
-git-tree-sha1 = "34c0e9ad262e5f7fc75b10a9952ca7692cfc5fbe"
-uuid = "d96e819e-fc66-5662-9728-84c9c7592b0a"
-version = "0.12.3"
-
 [[deps.Parsers]]
 deps = ["Dates", "SnoopPrecompile"]
 git-tree-sha1 = "8175fc2b118a3755113c8e68084dc1a9e63c61ee"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
 version = "2.5.3"
+
+[[deps.Pipe]]
+git-tree-sha1 = "6842804e7867b115ca9de748a0cf6b364523c16d"
+uuid = "b98c9c47-44ae-5843-9183-064241ee97a0"
+version = "1.3.0"
 
 [[deps.Pixman_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1507,10 +1683,10 @@ uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 version = "1.8.0"
 
 [[deps.PlotThemes]]
-deps = ["PlotUtils", "Requires", "Statistics"]
-git-tree-sha1 = "a3a964ce9dc7898193536002a6dd892b1b5a6f1d"
+deps = ["PlotUtils", "Statistics"]
+git-tree-sha1 = "1f03a2d339f42dca4a4da149c7e15e9b896ad899"
 uuid = "ccf2f8ad-2431-5c83-bf29-c5338b663b6a"
-version = "2.0.1"
+version = "3.1.0"
 
 [[deps.PlotUtils]]
 deps = ["ColorSchemes", "Colors", "Dates", "Printf", "Random", "Reexport", "SnoopPrecompile", "Statistics"]
@@ -1519,10 +1695,10 @@ uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.3.2"
 
 [[deps.Plots]]
-deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "GeometryBasics", "JSON", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "PlotThemes", "PlotUtils", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "Unzip"]
-git-tree-sha1 = "d16070abde61120e01b4f30f6f398496582301d6"
+deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "JLFzf", "JSON", "LaTeXStrings", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "Pkg", "PlotThemes", "PlotUtils", "Preferences", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "RelocatableFolders", "Requires", "Scratch", "Showoff", "SnoopPrecompile", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "Unzip"]
+git-tree-sha1 = "a99bbd3664bb12a775cda2eba7f3b2facf3dad94"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-version = "1.25.12"
+version = "1.38.2"
 
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "FixedPointNumbers", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "MIMEs", "Markdown", "Random", "Reexport", "URIs", "UUIDs"]
@@ -1536,12 +1712,6 @@ git-tree-sha1 = "a6062fe4063cdafe78f4a0a81cfffb89721b30e7"
 uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
 version = "1.4.2"
 
-[[deps.PositiveFactorizations]]
-deps = ["LinearAlgebra"]
-git-tree-sha1 = "17275485f373e6673f7e7f97051f703ed5b15b20"
-uuid = "85a6dd25-e78a-55b7-8502-1745935b8125"
-version = "0.2.4"
-
 [[deps.Preferences]]
 deps = ["TOML"]
 git-tree-sha1 = "47e5f437cc0e7ef2ce8406ce1e7e24d44915f88d"
@@ -1549,10 +1719,10 @@ uuid = "21216c6a-2e73-6563-6e65-726566657250"
 version = "1.3.0"
 
 [[deps.PrettyTables]]
-deps = ["Crayons", "Formatting", "Markdown", "Reexport", "Tables"]
-git-tree-sha1 = "dfb54c4e414caa595a1f2ed759b160f5a3ddcba5"
+deps = ["Crayons", "Formatting", "LaTeXStrings", "Markdown", "Reexport", "StringManipulation", "Tables"]
+git-tree-sha1 = "96f6db03ab535bdb901300f88335257b0018689d"
 uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
-version = "1.3.1"
+version = "2.2.2"
 
 [[deps.Printf]]
 deps = ["Unicode"]
@@ -1591,10 +1761,10 @@ uuid = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 version = "1.3.3"
 
 [[deps.RecipesPipeline]]
-deps = ["Dates", "NaNMath", "PlotUtils", "RecipesBase"]
-git-tree-sha1 = "dc1e451e15d90347a7decc4221842a022b011714"
+deps = ["Dates", "NaNMath", "PlotUtils", "RecipesBase", "SnoopPrecompile"]
+git-tree-sha1 = "e974477be88cb5e3040009f3767611bc6357846f"
 uuid = "01d81517-befc-4cb6-b9ec-a95719d0359c"
-version = "0.5.2"
+version = "0.6.11"
 
 [[deps.Reexport]]
 git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
@@ -1603,9 +1773,9 @@ version = "1.2.2"
 
 [[deps.RelocatableFolders]]
 deps = ["SHA", "Scratch"]
-git-tree-sha1 = "cdbd3b1338c72ce29d9584fdbe9e9b70eeb5adca"
+git-tree-sha1 = "90bc7a7c96410424509e4263e277e43250c05691"
 uuid = "05181044-ff0b-4ac5-8273-598c1e38db00"
-version = "0.1.3"
+version = "1.0.0"
 
 [[deps.Requires]]
 deps = ["UUIDs"]
@@ -1664,6 +1834,11 @@ deps = ["Dates", "Grisu"]
 git-tree-sha1 = "91eddf657aca81df9ae6ceb20b959ae5653ad1de"
 uuid = "992d4aef-0814-514b-bc4d-f2e9a6c4116f"
 version = "1.0.3"
+
+[[deps.SimpleBufferStream]]
+git-tree-sha1 = "874e8867b33a00e784c8a7e4b60afe9e037b74e1"
+uuid = "777ac1f9-54b0-4bf8-805c-2214025038e7"
+version = "1.1.0"
 
 [[deps.SnoopPrecompile]]
 deps = ["Preferences"]
@@ -1730,16 +1905,15 @@ uuid = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
 version = "0.6.33"
 
 [[deps.StatsPlots]]
-deps = ["AbstractFFTs", "Clustering", "DataStructures", "DataValues", "Distributions", "Interpolations", "KernelDensity", "LinearAlgebra", "MultivariateStats", "Observables", "Plots", "RecipesBase", "RecipesPipeline", "Reexport", "StatsBase", "TableOperations", "Tables", "Widgets"]
-git-tree-sha1 = "4d9c69d65f1b270ad092de0abe13e859b8c55cad"
+deps = ["AbstractFFTs", "Clustering", "DataStructures", "DataValues", "Distributions", "Interpolations", "KernelDensity", "LinearAlgebra", "MultivariateStats", "NaNMath", "Observables", "Plots", "RecipesBase", "RecipesPipeline", "Reexport", "StatsBase", "TableOperations", "Tables", "Widgets"]
+git-tree-sha1 = "e0d5bc26226ab1b7648278169858adcfbd861780"
 uuid = "f3b207a7-027a-5e70-b257-86293d7955fd"
-version = "0.14.33"
+version = "0.15.4"
 
-[[deps.StructArrays]]
-deps = ["Adapt", "DataAPI", "GPUArraysCore", "StaticArraysCore", "Tables"]
-git-tree-sha1 = "b03a3b745aa49b566f128977a7dd1be8711c5e71"
-uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
-version = "0.6.14"
+[[deps.StringManipulation]]
+git-tree-sha1 = "46da2434b41f41ac3594ee9816ce5541c6096123"
+uuid = "892a3eda-7b42-436c-8928-eab12a02cf0e"
+version = "0.3.0"
 
 [[deps.SuiteSparse]]
 deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
@@ -1761,6 +1935,12 @@ deps = ["IteratorInterfaceExtensions"]
 git-tree-sha1 = "c06b2f539df1c6efa794486abfb6ed2022561a39"
 uuid = "3783bdb8-4a98-5b6b-af9a-565f29a5fe9c"
 version = "1.0.1"
+
+[[deps.TableTraitsUtils]]
+deps = ["DataValues", "IteratorInterfaceExtensions", "Missings", "TableTraits"]
+git-tree-sha1 = "78fecfe140d7abb480b53a44f3f85b6aa373c293"
+uuid = "382cd787-c1b6-5bf2-a167-d5b971a19bda"
+version = "1.0.2"
 
 [[deps.Tables]]
 deps = ["DataAPI", "DataValueInterfaces", "IteratorInterfaceExtensions", "LinearAlgebra", "OrderedCollections", "TableTraits", "Test"]
@@ -1794,6 +1974,12 @@ git-tree-sha1 = "6bac775f2d42a611cdfcd1fb217ee719630c4175"
 uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
 version = "0.1.6"
 
+[[deps.URIParser]]
+deps = ["Unicode"]
+git-tree-sha1 = "53a9f49546b8d2dd2e688d216421d050c9a31d0d"
+uuid = "30578b45-9adc-5946-b283-645ec420af67"
+version = "0.4.1"
+
 [[deps.URIs]]
 git-tree-sha1 = "ac00576f90d8a259f2c9d823e91d1de3fd44d348"
 uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
@@ -1802,11 +1988,6 @@ version = "1.4.1"
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
-
-[[deps.UnPack]]
-git-tree-sha1 = "387c1f73762231e86e0c9c5443ce3b4a0a9a0c2b"
-uuid = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
-version = "1.0.2"
 
 [[deps.Unicode]]
 uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
@@ -1818,15 +1999,27 @@ uuid = "1cfade01-22cf-5700-b092-accc4b62d6e1"
 version = "0.4.1"
 
 [[deps.Unzip]]
-git-tree-sha1 = "34db80951901073501137bdbc3d5a8e7bbd06670"
+git-tree-sha1 = "ca0969166a028236229f63514992fc073799bb78"
 uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
-version = "0.1.2"
+version = "0.2.0"
 
 [[deps.Vcov]]
-deps = ["Combinatorics", "GroupedArrays", "LinearAlgebra", "StatsBase", "Tables"]
-git-tree-sha1 = "1233e304ac41897767c137f6ee281391d6ebfb0e"
+deps = ["Combinatorics", "GroupedArrays", "LinearAlgebra", "StatsAPI", "StatsBase", "Tables"]
+git-tree-sha1 = "2ba425b1f94f0915c4552fd1f94b267da760e89f"
 uuid = "ec2bfdc2-55df-4fc9-b9ae-4958c2cf2486"
-version = "0.5.2"
+version = "0.6.0"
+
+[[deps.Vega]]
+deps = ["DataStructures", "DataValues", "Dates", "FileIO", "FilePaths", "IteratorInterfaceExtensions", "JSON", "JSONSchema", "MacroTools", "NodeJS", "Pkg", "REPL", "Random", "Setfield", "TableTraits", "TableTraitsUtils", "URIParser"]
+git-tree-sha1 = "c6bd0c396ce433dce24c4a64d5a5ab6dc8e40382"
+uuid = "239c3e63-733f-47ad-beb7-a12fde22c578"
+version = "2.3.1"
+
+[[deps.VegaLite]]
+deps = ["Base64", "DataStructures", "DataValues", "Dates", "FileIO", "FilePaths", "IteratorInterfaceExtensions", "JSON", "MacroTools", "NodeJS", "Pkg", "REPL", "Random", "TableTraits", "TableTraitsUtils", "URIParser", "Vega"]
+git-tree-sha1 = "3e23f28af36da21bfb4acef08b144f92ad205660"
+uuid = "112f6efa-9a02-5b7d-90c0-432ed331239a"
+version = "2.6.0"
 
 [[deps.Wayland_jll]]
 deps = ["Artifacts", "Expat_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg", "XML2_jll"]
@@ -2018,6 +2211,12 @@ git-tree-sha1 = "e45044cd873ded54b6a5bac0eb5c971392cf1927"
 uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
 version = "1.5.2+0"
 
+[[deps.fzf_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "868e669ccb12ba16eaf50cb2957ee2ff61261c56"
+uuid = "214eeab7-80f7-51ab-84ad-2988db7cef09"
+version = "0.29.0+0"
+
 [[deps.libaom_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "3a2ea60308f0996d26f1e5354e10c24e9ef905d4"
@@ -2083,35 +2282,85 @@ version = "1.4.1+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─c3feba7a-6a36-11eb-0303-7b823e9867b0
-# ╟─e85bfc08-7789-11eb-3a9d-b7b7a95b74ae
-# ╠═adb93aee-f5a5-4034-be55-d991c3f3dea6
-# ╠═b5c489d7-ed76-426b-a508-4cbbe852aece
-# ╠═e25c28d8-6a36-11eb-07f3-2fcd5b400618
-# ╟─e4fdebf8-6a36-11eb-30d3-dffd45f2943f
-# ╠═7c447c7a-6a37-11eb-03cf-6f2c5b11326b
-# ╠═3b1eb36e-6a37-11eb-06ac-ef996c61826d
-# ╠═3e436bda-6a5e-11eb-3a3f-c94522e2aba1
-# ╟─0c93c0f8-7710-11eb-000e-0fba119bd871
-# ╠═a179f2e6-7710-11eb-2786-3790a6a86369
-# ╟─f8a531da-770f-11eb-3564-23e339ffdeb1
-# ╠═b5170194-7711-11eb-29e3-b54bef191b1e
-# ╠═de6dc514-7711-11eb-2c01-bfd2d49bfe43
-# ╠═442c71b8-6a5e-11eb-1dda-8b6b4c760f53
-# ╠═fda20dc0-e906-4c75-a28f-0ffa1b68232c
-# ╟─00cae6b8-7731-11eb-258a-f1795edc3190
-# ╠═51460370-7731-11eb-13be-a9c361b59e11
-# ╟─546b2e76-7732-11eb-0b27-1bc2d7c1e576
-# ╟─91e11e7a-7780-11eb-033e-efe7415b20ac
-# ╠═e4a73dac-777f-11eb-20e7-99da9a11f1af
-# ╟─ae691f34-7780-11eb-2196-3b4b000f6bee
-# ╟─e1212ed0-7780-11eb-0606-af5ba16a2316
-# ╠═70fbf634-7781-11eb-2aca-e33cfac2bc00
-# ╠═0e285b06-7781-11eb-2594-81071962ac97
-# ╟─fae052fa-7781-11eb-09de-65aec4c5666a
-# ╟─36b69d3e-7782-11eb-3ff2-873f88e0c02d
-# ╠═574881ac-7782-11eb-06b9-d927413d0fb7
-# ╠═e7c0bff8-7785-11eb-025f-c3a86f0ae20e
-# ╠═98a54b7c-7786-11eb-21f6-21d8e645491b
+# ╟─d5554696-5f6f-11eb-057f-a79641cf483a
+# ╟─ad1cc4c6-5f72-11eb-35d5-53ff88f1f041
+# ╟─85ab85ff-6986-46e5-b8ba-6c80ccca8a3e
+# ╠═5c1aeb4f-fef2-41d0-813f-eb78728ea83b
+# ╠═24722a1a-7213-40ae-9fc8-e9e59924b758
+# ╠═b2c0299f-5711-4071-8c29-b78616e5f874
+# ╠═c6f8ecfe-0e81-45a9-b7e6-a9ff629b549b
+# ╠═9e653793-a4dc-4843-980b-d8921303422f
+# ╟─7b4ecdee-5f73-11eb-388c-4d6f9719d79b
+# ╟─a75918ae-5f73-11eb-3a3e-2f64c0dcc49c
+# ╠═a80227f8-5f77-11eb-1211-95dd2c151877
+# ╠═b9e1f8de-5f77-11eb-25b8-57e263315ac3
+# ╟─a06995aa-5f78-11eb-3939-f9aca087b12c
+# ╠═5b2d6ebe-5f78-11eb-0528-ab36ae696a35
+# ╟─5ea12c9c-5f79-11eb-34e7-2d7f07854b31
+# ╟─95ad1f3c-5f79-11eb-36fb-1b384c84317c
+# ╠═ca038b54-5f79-11eb-0851-9f684e3bb83f
+# ╟─cfaabda0-5f79-11eb-17e4-a7cd045681da
+# ╠═c642b578-5f77-11eb-1346-15a35500e61f
+# ╠═3d6cf930-5f80-11eb-04a1-0f608e26886b
+# ╟─c7192aba-5fe8-11eb-1d50-81cb0f959b4a
+# ╟─600c6368-5f80-11eb-24b1-c35a333d7164
+# ╠═bcaf264a-5f77-11eb-2bf5-1bd3c16dbce6
+# ╠═46da23f6-5f82-11eb-2c42-dbcf1c09192e
+# ╟─65d2d0e8-5f85-11eb-2e4b-b3e561a1a63c
+# ╠═81b220c8-5f82-11eb-141a-53ed12752330
+# ╟─1f577cac-5feb-11eb-19c7-2ff4856aee9d
+# ╠═3f871682-5f86-11eb-2c50-971aa2d55aec
+# ╟─34fa745c-5fec-11eb-3c3c-67eba7bffa6e
+# ╟─985c4280-5fec-11eb-362b-21e463e63f8d
+# ╠═7c756c72-5f83-11eb-28d5-7b5654c51ea3
+# ╟─8c8cab5a-5f85-11eb-1bb0-e506d437545d
+# ╠═57324928-5f83-11eb-3e9f-4562c8b03cd4
+# ╠═a3452e58-5f85-11eb-18fb-e5f00173defb
+# ╠═f6620c93-56fd-45b4-9b4e-6cb6ec8736c7
+# ╠═bff2e0a8-5f86-11eb-24fd-9504f5c47ffb
+# ╟─f895392e-5f8b-11eb-1d7a-3f9c6c5ce483
+# ╟─123a49dc-5f8c-11eb-1c59-c5e5715b819f
+# ╠═2dda9576-5f90-11eb-29eb-91dec5be5175
+# ╠═0b1b8522-5f90-11eb-2f9e-91707f735fe6
+# ╟─2beddacc-5f93-11eb-35a0-cfee0361b2eb
+# ╠═468e9380-5f96-11eb-1e57-9bf6b185cbd1
+# ╟─2632c508-5f9c-11eb-149b-edb3f5aee983
+# ╠═62f7ee18-5f9d-11eb-1b6c-4dabc3f9d787
+# ╟─656f7c7e-5f9d-11eb-041d-a903e70f6843
+# ╟─0926de71-d426-4404-9cd2-80dbaa52ddc2
+# ╠═c7c1fdee-5f9c-11eb-00bb-bd871c7f7d92
+# ╟─70b24c85-dcfb-4ab4-bee9-7ba993686290
+# ╟─ca02b9ee-5f9d-11eb-14f2-b54ef6111837
+# ╟─fdc155a8-93de-4b5e-b0f9-95b1bca504ab
+# ╠═8629935e-5f9e-11eb-0073-7b28899deac5
+# ╟─2729eb0a-5fa2-11eb-2176-4fcbb5cb1c44
+# ╟─d6e5bb2a-4fe5-4f5e-95e5-3c41e45e98b9
+# ╠═edd421a8-c4a3-4fcf-acc9-7f8e90c5537f
+# ╟─d6305b3a-5f9e-11eb-163d-736097666c33
+# ╟─23aa2871-9d0b-4d99-a0d9-0fd8ff72a153
+# ╠═5f82fc80-5f9f-11eb-0670-f57b2e1c02fc
+# ╠═9180dc5c-5f9f-11eb-1d51-cb0516deb7b5
+# ╠═51012006-5f9f-11eb-1c62-3595a0dbd003
+# ╟─0b4f51ca-5fa1-11eb-1466-4959a7e056ae
+# ╠═5c8d4f8e-5ff3-11eb-0c55-d1a3795358e3
+# ╟─1d6b90b2-5fa1-11eb-0b52-b36c3642539a
+# ╠═00c8ef48-5ff8-11eb-1cf3-f7d391228226
+# ╟─28b76e70-5fa1-11eb-31de-d12718c8de03
+# ╟─1790c00d-7a67-42db-b116-53e879608eae
+# ╠═e66e5ec8-8e92-448c-a659-8f44801adfff
+# ╟─a4ae6fb8-5fa1-11eb-1113-a565d047be6d
+# ╟─753170e8-4c68-4e1e-ade2-e1e51b7f245c
+# ╟─fe0702b3-8fc7-4add-b7c9-e6f688408df1
+# ╟─a54d12d1-9389-46a3-9923-4543ce444b45
+# ╟─fdd29235-5ae5-4e9d-be11-8d39bd6b2b6e
+# ╟─7bfe6fee-5fa3-11eb-3f31-59a77a78f035
+# ╠═b443a46e-5fa3-11eb-3e71-dfd0683dc6e9
+# ╟─19fecb37-ad0a-417d-ab93-de8f7ebfc4bf
+# ╠═96bc9ea6-2f65-4e9c-981f-4027458c8a21
+# ╠═73c4d839-24d6-47dc-9114-8853ab9729d4
+# ╟─7bd3ca07-6818-411e-aa7e-a26c3239f530
+# ╟─4696424d-f7ac-4733-88b6-2b804e4f26d1
+# ╟─c09dd940-5ff9-11eb-0db4-bf9f169c5508
+# ╟─cdf953eb-a153-42de-8f75-adbddccd634f
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
